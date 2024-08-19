@@ -1,0 +1,186 @@
+---
+title: "Fallstudie für Lidl: Erweiterung des Süßwarensortiments (Eigenmarke)"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+
+### Datenexploration
+
+#### Daten:
+
+- 9 Characteristika von bereits existierenden Süßigkeiten. (boolean)
+- sugarpercent: Der Perzentilwert des Zuckergehalts innerhalb des Datensatzes.
+- pricepercent: Der Stückpreis-Prozentwert im Vergleich zum Rest der Menge.
+- winpercent: Der Gesamtsiegprozentsatz basierend auf 269.000 Matchups.
+
+#### Ziel:
+
+- Analysiere die Auswirkungen der Charakteristika von Süßwaren auf deren Beliebtheit
+- Gebe eine Empfehlung auf Basis dieser Analyse für die Eigenschaften einer neuen Süßigkeit.
+
+
+```{python}
+#| label: fig-polar
+#| fig-cap: "A line plot on a polar axis"
+
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import statsmodels.api as sm
+
+
+df_original = pd.read_csv('candy-data.csv')
+#pd.set_option("display.max_rows", None)
+df = df_original.copy()
+df['winpercent'] = df_original['winpercent']/100
+del(df_original)
+df.sort_values(by='winpercent',ascending=False)
+```
+
+#### Probleme mit dieser Analyse
+- Beliebtheit ist etwas biased, keine da der Preis in dem Ranking keine Rolle spielt.
+  - Marketing, Brand reputation, packaging, current and future market trends sind auch nicht berücksichtigt.
+- Da die top 5 nicht sonderlich teuer sind, habe ich dies im Folgenden vernachlässigt.
+
+#### Was macht eine gute Empfehlung aus?
+- Sollte möglichst belieble Eigenschaften haben
+- Sollte nicht zu ähnlich zu Produkten bereits auf dem Markt sein --> we need some uniqueness to stand out
+- Manche Eigenschaften sind nicht (gut) kombinierbar
+- Manche Eigenschaften sind (nur) in Kombination begehrt
+  - Interactions müssen hier analysiert werden!
+
+
+```{python, include=True}
+print('Do we have any NaN values:')
+df.isnull().values.any()
+```
+
+#### Correlation matrix
+
+```{python}
+corr = df.iloc[:, 1:].corr() #correlation matrix
+mask = np.triu(np.ones_like(corr, dtype=bool)) # mask for upper triangle
+f, ax = plt.subplots(figsize=(9, 9))
+cmap = sns.diverging_palette(230, 20, as_cmap=True) # Colormap
+sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
+            square=True, linewidths=.5, cbar_kws={"shrink": .5})
+```
+
+```{python}
+sns.regplot(x='pricepercent', y='winpercent', data=df)
+X = sm.add_constant(df['pricepercent'])
+sm.OLS(df.winpercent,X).fit().summary()
+```
+
+#### Einfluss der Preis Variable
+
+- Es besteht eine klare pos. Korrelation zw. Preis und Beliebtheit.
+- fruity, hard, pluribus:
+  - einzige vars die im Schnitt Süßigkeiten unbeliebler machen
+  - auch die einzigen vars die Süßigkeiten billiger machen
+- Billigsegment verliert gegen teurere Bars im direkten Vergleich, aber unklar ob das auch im Supermarkt mit Preisen der Fall ist
+  - Könnten im Supermarkt besser performen
+  - Könnten ein Nichenprodukt sein
+  - Preis ist hier pro Stück, größere Riegel könnten kleine Packungen mit Bonbons mit purer Masse schlagen
+
+#### Clusteranalysis
+
+- Können wir Marktsegmente identifizieren?
+
+```{python}
+# Preprocessing
+from sklearn.preprocessing import StandardScaler
+df_YX = df.select_dtypes(include=[float, int])
+scaler = StandardScaler()
+df_normalized = scaler.fit_transform(df_YX)
+
+# Distance Matrix
+from scipy.spatial.distance import pdist, squareform
+distance_matrix = pdist(df_normalized, metric='euclidean')
+# distance_matrix = squareform(distance_matrix)
+
+# Hierarchical Clustering
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+import matplotlib.pyplot as plt
+
+# Perform hierarchical clustering
+linked = linkage(distance_matrix, method='ward')
+
+# Plot the dendrogram
+plt.figure(figsize=(9, 7))
+dendrogram(linked, orientation='top', distance_sort='descending', show_leaf_counts=True)
+plt.title('Dendrogram')
+plt.xlabel('Sample index')
+plt.ylabel('Distance')
+plt.show()
+
+# Determine Clusters
+num_clusters = 2 # Specify the number of clusters
+clusters = fcluster(linked, num_clusters, criterion='maxclust')
+
+# Add cluster labels to the original DataFrame
+df_YX['Cluster'] = clusters
+
+# Visualize clusters
+plt.figure(figsize=(12, 8))
+sns.scatterplot(x=df_YX['pricepercent'], y=df_YX['winpercent'], hue=df_YX['Cluster'], palette='viridis')
+plt.title('Clusters in Feature Space')
+plt.xlabel('Price percentile')
+plt.ylabel('Winning Percentage')
+plt.legend(title='Cluster')
+plt.show()
+
+cluster_means = df_YX.groupby('Cluster').mean()
+print(cluster_means)
+
+from scipy.stats import f_oneway
+
+# Perform ANOVA for each feature
+features = df_YX.columns[df_YX.columns != 'Cluster']
+anova_results = {}
+for feature in features:
+    groups = [df_YX[df_YX['Cluster'] == cluster][feature] for cluster in df_YX['Cluster'].unique()]
+    f_stat, p_value = f_oneway(*groups)
+    anova_results[feature] = p_value
+
+# Print ANOVA results
+anova_df = pd.DataFrame.from_dict(anova_results, orient='index', columns=['p-value'])
+print(anova_df)
+
+from sklearn.ensemble import RandomForestClassifier
+
+# Train a RandomForestClassifier to predict cluster labels
+X = df_YX  # Feature matrix
+y = df_YX['Cluster']  # Cluster labels
+
+clf = RandomForestClassifier(n_estimators=100, random_state=0)
+clf.fit(X, y)
+
+# Get feature importances
+importances = clf.feature_importances_
+feature_importance_df = pd.DataFrame({'Feature': df_YX.columns, 'Importance': importances})
+feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False)
+
+print(feature_importance_df)
+```
+
+
+```{python}
+# Example with one feature
+
+# Example for multiple features
+features = ['chocolate', 'fruity', 'hard']
+df_melted = df_YX.melt(id_vars='Cluster', value_vars=features, var_name='Feature', value_name='Value')
+plt.figure(figsize=(12, 8))
+sns.boxplot(x='Feature', y='Value', hue='Cluster', data=df_melted)
+plt.title('Feature Distributions by Cluster')
+plt.xticks(rotation=45)
+plt.show()
+```
+
+#### Clearly we have two different segments
+
+we should handle them seperately
