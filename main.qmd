@@ -81,15 +81,6 @@ X = sm.add_constant(df['pricepercent'])
 sm.OLS(df.winpercent,X).fit().summary()
 ```
 
-```{python}
-#| fig-cap: "Figure: OLS:  winpercent ~ pricequartile"
-import warnings
-with warnings.catch_warnings():
-    sns.regplot(x='pricepercent', y='winpercent', data=df)
-    X = sm.add_constant(df['pricepercent'])
-    sm.OLS(df.winpercent,X).fit().summary()
-```
-
 #### Einfluss der Preis Variable
 
 - Es besteht eine klare pos. Korrelation zw. Preis und Beliebtheit.
@@ -100,7 +91,6 @@ with warnings.catch_warnings():
   - Könnten im Supermarkt besser performen
   - Könnten ein Nichenprodukt sein
   - Preis ist hier pro Stück, größere Riegel könnten kleine Packungen mit Bonbons mit purer Masse schlagen
-
 
 #### Correlation matrix
 
@@ -115,6 +105,7 @@ sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
 ```
 
 Hier sehen wir welche Eigenschaften öfters zusammen (rot) oder exkludierend (blau) befunden werden:
+
 - fruity, hard, fruity oft zusammen
 - rest oft zusammen
 - fruity, hard, pluribus selten mit rest
@@ -145,7 +136,7 @@ import matplotlib.pyplot as plt
 linked = linkage(distance_matrix, method='ward')
 
 # Plot the dendrogram
-plt.figure(figsize=(9, 7))
+plt.figure(figsize=(8, 8))
 dendrogram(linked, orientation='top', distance_sort='descending', show_leaf_counts=True)
 plt.title('Dendrogram')
 plt.xlabel('Sample index')
@@ -160,7 +151,7 @@ clusters = fcluster(linked, num_clusters, criterion='maxclust')
 df_YX['Cluster'] = clusters
 
 # Visualize clusters
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(8, 8))
 sns.scatterplot(x=df_YX['pricepercent'], y=df_YX['winpercent'], hue=df_YX['Cluster'], palette='viridis')
 plt.title('Clusters in Feature Space')
 plt.xlabel('Price percentile')
@@ -171,54 +162,60 @@ plt.show()
 cluster_means = df_YX.groupby('Cluster').mean()
 print(cluster_means)
 
-from scipy.stats import f_oneway
-
-# Perform ANOVA for each feature:
-features = df_YX.columns[df_YX.columns != 'Cluster']
-anova_results = {}
-for feature in features:
-    groups = [df_YX[df_YX['Cluster'] == cluster][feature] for cluster in df_YX['Cluster'].unique()]
-    f_stat, p_value = f_oneway(*groups)
-    anova_results[feature] = p_value
-
-# Print ANOVA results
-anova_df = pd.DataFrame.from_dict(anova_results, orient='index', columns=['p-value'])
-print(anova_df)
-
-from sklearn.ensemble import RandomForestClassifier
-
-# Train a RandomForestClassifier to predict cluster labels
-X = df_YX  # Feature matrix
-y = df_YX['Cluster']  # Cluster labels
-
-clf = RandomForestClassifier(n_estimators=100, random_state=0)
-clf.fit(X, y)
-
-# Get feature importances
-importances = clf.feature_importances_
-feature_importance_df = pd.DataFrame({'Feature': df_YX.columns, 'Importance': importances})
-feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False)
-
-print(feature_importance_df)
 ```
 
-
-```{python}
-# Example with one feature
-
-# Example for multiple features
-features = ['chocolate', 'fruity', 'hard']
-df_melted = df_YX.melt(id_vars='Cluster', value_vars=features, var_name='Feature', value_name='Value')
-plt.figure(figsize=(12, 8))
-sns.boxplot(x='Feature', y='Value', hue='Cluster', data=df_melted)
-plt.title('Feature Distributions by Cluster')
-plt.xticks(rotation=45)
-plt.show()
-```
 
 #### Clearly we have two different segments
 
 Should we handle them differently?
 
 - Compare how different they are
-  - cluster again without labels and visualize
+  - cluster again without labels and visualize with t-SNE with with only attributes
+
+```{python}
+import pandas as pd
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+import plotly.express as px
+
+# Select and copy relevant columns from the original DataFrame
+df_attr = df_YX[['chocolate', 'fruity', 'caramel', 'peanutyalmondy', 
+                 'nougat', 'crispedricewafer', 'hard', 'bar', 'pluribus']].copy()
+
+# Perform PCA
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(df_attr)
+
+# Perform t-SNE
+tsne = TSNE(n_components=2, random_state=42)
+tsne_results = tsne.fit_transform(df_attr)
+
+# Add PCA and t-SNE results to the DataFrame
+df_attr['pca-2d-one'] = X_pca[:, 0]
+df_attr['pca-2d-two'] = X_pca[:, 1]
+df_attr['tsne-2d-one'] = tsne_results[:, 0]
+df_attr['tsne-2d-two'] = tsne_results[:, 1]
+
+# Plot t-SNE results for selected columns
+# selected_columns_tsne = ['fruity', 'peanutyalmondy', 'crispedricewafer', 'hard', 'pluribus']
+# for column in selected_columns_tsne:
+#      fig_tsne = px.scatter(df_attr, x='tsne-2d-one', y='tsne-2d-two', 
+#                           color=df_attr[column].astype(str),
+#                           title=f't-SNE colored by {column}',
+#                           labels={column: column})
+#     fig_tsne.show()
+
+color_map = { '0': 'blue', '1': 'red' }
+# Plot PCA results for all feature columns
+selected_columns_pca = ['fruity','hard','nougat','crispedricewafer','peanutyalmondy', 'chocolate','bar','pluribus']
+feature_columns = df_attr.columns[:-4]  # Exclude PCA and t-SNE columns
+for column in feature_columns:
+    fig_pca = px.scatter(df_attr, x='pca-2d-one', y='pca-2d-two', 
+                        color=df_attr[column].astype(str),
+                        title=f'PCA colored by {column}',
+                        color_discrete_map=color_map,
+                        labels={column: column})
+    fig_pca.show()
+
+
+```
