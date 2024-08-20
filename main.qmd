@@ -22,8 +22,7 @@ jupyter: python3
 
 
 ```{python}
-#| label: fig-polar
-#| fig-cap: "A line plot on a polar axis"
+#| fig-cap: "Figure: Best and worst performing candy"
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -37,13 +36,30 @@ df_original = pd.read_csv('candy-data.csv')
 df = df_original.copy()
 df['winpercent'] = df_original['winpercent']/100
 del(df_original)
-df.sort_values(by='winpercent',ascending=False)
+
+df_sorted = df.sort_values(by='winpercent', ascending=False)
+
+df_filtered = df_sorted.drop(
+    columns=[
+        'caramel', 
+        'peanutyalmondy', 
+        'nougat', 
+        'crispedricewafer', 
+        'hard', 
+        'bar', 
+        'pluribus'
+    ], 
+    inplace=False
+)
+df_filtered
 ```
 
 #### Probleme mit dieser Analyse
-- Beliebtheit ist etwas biased, keine da der Preis in dem Ranking keine Rolle spielt.
+- Beliebtheit ist etwas biased, da der Preis in dem Ranking keine Rolle spielt.
   - Marketing, Brand reputation, packaging, current and future market trends sind auch nicht berücksichtigt.
-- Da die top 5 nicht sonderlich teuer sind, habe ich dies im Folgenden vernachlässigt.
+  - Preis beinhaltet hier auch höheren Wert durch größere Einzelmenge
+- Ebenso scheint der Zuckergehalt nicht prozentual zu sein, sondern bezieht sich auf absolute Werte.
+  - Zuckerranking bedeuted hier oft nicht süßer, sondern einfach dass das Produktgewicht höher ist.
 
 #### Was macht eine gute Empfehlung aus?
 - Sollte möglichst belieble Eigenschaften haben
@@ -58,33 +74,52 @@ print('Do we have any NaN values:')
 df.isnull().values.any()
 ```
 
-#### Correlation matrix
-
 ```{python}
-corr = df.iloc[:, 1:].corr() #correlation matrix
-mask = np.triu(np.ones_like(corr, dtype=bool)) # mask for upper triangle
-f, ax = plt.subplots(figsize=(9, 9))
-cmap = sns.diverging_palette(230, 20, as_cmap=True) # Colormap
-sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
-            square=True, linewidths=.5, cbar_kws={"shrink": .5})
-```
-
-```{python}
+#| fig-cap: "Figure: Summary Statistics for OLS:  winpercent ~ pricequartile"
 sns.regplot(x='pricepercent', y='winpercent', data=df)
 X = sm.add_constant(df['pricepercent'])
 sm.OLS(df.winpercent,X).fit().summary()
+```
+
+```{python}
+#| fig-cap: "Figure: OLS:  winpercent ~ pricequartile"
+import warnings
+with warnings.catch_warnings():
+    sns.regplot(x='pricepercent', y='winpercent', data=df)
+    X = sm.add_constant(df['pricepercent'])
+    sm.OLS(df.winpercent,X).fit().summary()
 ```
 
 #### Einfluss der Preis Variable
 
 - Es besteht eine klare pos. Korrelation zw. Preis und Beliebtheit.
 - fruity, hard, pluribus:
-  - einzige vars die im Schnitt Süßigkeiten unbeliebler machen
+  - einzigen vars die im Schnitt Süßigkeiten unbeliebler machen
   - auch die einzigen vars die Süßigkeiten billiger machen
 - Billigsegment verliert gegen teurere Bars im direkten Vergleich, aber unklar ob das auch im Supermarkt mit Preisen der Fall ist
   - Könnten im Supermarkt besser performen
   - Könnten ein Nichenprodukt sein
   - Preis ist hier pro Stück, größere Riegel könnten kleine Packungen mit Bonbons mit purer Masse schlagen
+
+
+#### Correlation matrix
+
+```{python}
+#| fig-cap: "Best and worst performing candy"
+corr = df.iloc[:, 1:].corr() #correlation matrix
+mask = np.triu(np.ones_like(corr, dtype=bool)) # mask for upper triangle
+f, ax = plt.subplots(figsize=(8, 8))
+cmap = sns.diverging_palette(230, 20, as_cmap=True) # Colormap
+sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
+            square=True, linewidths=.5, cbar_kws={"shrink": .5})
+```
+
+Hier sehen wir welche Eigenschaften öfters zusammen (rot) oder exkludierend (blau) befunden werden:
+- fruity, hard, fruity oft zusammen
+- rest oft zusammen
+- fruity, hard, pluribus selten mit rest
+
+--> Sehen wir hier zwei Hauptgruppen: Schokolade und fruity/hard candy?
 
 #### Clusteranalysis
 
@@ -138,7 +173,7 @@ print(cluster_means)
 
 from scipy.stats import f_oneway
 
-# Perform ANOVA for each feature
+# Perform ANOVA for each feature:
 features = df_YX.columns[df_YX.columns != 'Cluster']
 anova_results = {}
 for feature in features:
@@ -183,4 +218,7 @@ plt.show()
 
 #### Clearly we have two different segments
 
-we should handle them seperately
+Should we handle them differently?
+
+- Compare how different they are
+  - cluster again without labels and visualize
