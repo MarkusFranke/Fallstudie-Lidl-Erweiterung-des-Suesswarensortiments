@@ -14,10 +14,10 @@ class CandyDataProcessor:
         self.df = df
         self.original_df = self.df.copy()
 
-
     def sort_by_win_percent(self, ascending=False):
         """Sort the DataFrame by 'winpercent' in descending order."""
-        return self.df.sort_values(by='winpercent', ascending=ascending)
+        self.df = self.df.sort_values(by='winpercent', ascending=ascending)
+        return self
 
     @staticmethod
     def get_predictor_cols():
@@ -26,13 +26,15 @@ class CandyDataProcessor:
 
     def filter_ingredient_columns(self):
         """Filter out non-ingredient columns and retain only ingredient-related features."""
-        return self.df[self.get_predictor_cols()]
+        
+        self.df = self.df[self.get_predictor_cols()]
+        return self
 
     def get_num_norm_cols(self):
-        """Normalize specified numerical columns using StandardScaler."""
+        """Get normalized numerical columns using StandardScaler."""
         scaler = StandardScaler()
         df = self.df.select_dtypes(include=[float, int])
-        df = scaler.fit_transform(df)
+        YX = scaler.fit_transform(df)
         return df
 
     def prepare_features_and_target(self, feature_columns, target_column):
