@@ -27,7 +27,7 @@
         "- Analysiere die Auswirkungen der Charakteristika von Süßwaren auf deren Beliebtheit\n",
         "- Gebe eine Empfehlung auf Basis dieser Analyse für die Eigenschaften einer neuen Süßigkeit.\n"
       ],
-      "id": "7747f808"
+      "id": "d73c5f15"
     },
     {
       "cell_type": "code",
@@ -35,36 +35,19 @@
       "source": [
         "#| fig-cap: \"Figure: Best and worst performing candy\"\n",
         "\n",
+        "from data_processing import CandyDataProcessor\n",
+        "\n",
         "import numpy as np\n",
         "import matplotlib.pyplot as plt\n",
         "import seaborn as sns\n",
         "import pandas as pd\n",
         "import statsmodels.api as sm\n",
         "\n",
+        "processor = CandyDataProcessor('candy-data.csv')\n",
         "\n",
-        "df_original = pd.read_csv('candy-data.csv')\n",
-        "#pd.set_option(\"display.max_rows\", None)\n",
-        "df = df_original.copy()\n",
-        "df['winpercent'] = df_original['winpercent']/100\n",
-        "del(df_original)\n",
-        "\n",
-        "df_sorted = df.sort_values(by='winpercent', ascending=False)\n",
-        "\n",
-        "df_filtered = df_sorted.drop(\n",
-        "    columns=[\n",
-        "        'caramel', \n",
-        "        'peanutyalmondy', \n",
-        "        'nougat', \n",
-        "        'crispedricewafer', \n",
-        "        'hard', \n",
-        "        'bar', \n",
-        "        'pluribus'\n",
-        "    ], \n",
-        "    inplace=False\n",
-        ")\n",
-        "df_filtered"
+        "processor.sort_by_win_percent()"
       ],
-      "id": "f31331b6",
+      "id": "638bfd49",
       "execution_count": null,
       "outputs": []
     },
@@ -86,16 +69,16 @@
         "- Manche Eigenschaften sind (nur) in Kombination begehrt\n",
         "  - Interactions müssen hier analysiert werden!\n"
       ],
-      "id": "a90283a4"
+      "id": "ca659a1d"
     },
     {
       "cell_type": "code",
       "metadata": {},
       "source": [
         "print('Do we have any NaN values:')\n",
-        "df.isnull().values.any()"
+        "processor.df.isnull().values.any()"
       ],
-      "id": "3b26614d",
+      "id": "5242f95b",
       "execution_count": null,
       "outputs": []
     },
@@ -103,12 +86,12 @@
       "cell_type": "code",
       "metadata": {},
       "source": [
-        "#| fig-cap: \"Figure: Summary Statistics for OLS:  winpercent ~ pricequartile\"\n",
-        "sns.regplot(x='pricepercent', y='winpercent', data=df)\n",
-        "X = sm.add_constant(df['pricepercent'])\n",
-        "sm.OLS(df.winpercent,X).fit().summary()"
+        "#| fig-cap: \"Figure 1: Summary Statistics for OLS:  winpercent ~ pricequartile\"\n",
+        "sns.regplot(x='pricepercent', y='winpercent', data=processor.df)\n",
+        "X = sm.add_constant(processor.df['pricepercent'])\n",
+        "sm.OLS(processor.df.winpercent,X).fit().summary()"
       ],
-      "id": "432ad0b9",
+      "id": "99eda49e",
       "execution_count": null,
       "outputs": []
     },
@@ -129,21 +112,21 @@
         "\n",
         "#### Correlation matrix\n"
       ],
-      "id": "f7da7941"
+      "id": "51948a24"
     },
     {
       "cell_type": "code",
       "metadata": {},
       "source": [
         "#| fig-cap: \"Best and worst performing candy\"\n",
-        "corr = df.iloc[:, 1:].corr() #correlation matrix\n",
+        "corr = processor.df.iloc[:, 1:].corr() #correlation matrix\n",
         "mask = np.triu(np.ones_like(corr, dtype=bool)) # mask for upper triangle\n",
         "f, ax = plt.subplots(figsize=(8, 8))\n",
         "cmap = sns.diverging_palette(230, 20, as_cmap=True) # Colormap\n",
         "sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,\n",
         "            square=True, linewidths=.5, cbar_kws={\"shrink\": .5})"
       ],
-      "id": "040bdd37",
+      "id": "8608cde5",
       "execution_count": null,
       "outputs": []
     },
@@ -163,28 +146,20 @@
         "\n",
         "- Können wir Marktsegmente identifizieren?\n"
       ],
-      "id": "f8177c56"
+      "id": "bde991cc"
     },
     {
       "cell_type": "code",
       "metadata": {},
       "source": [
-        "# Preprocessing\n",
-        "from sklearn.preprocessing import StandardScaler\n",
-        "df_YX = df.select_dtypes(include=[float, int])\n",
-        "scaler = StandardScaler()\n",
-        "df_normalized = scaler.fit_transform(df_YX)\n",
-        "\n",
         "# Distance Matrix\n",
-        "from scipy.spatial.distance import pdist, squareform\n",
-        "distance_matrix = pdist(df_normalized, metric='euclidean')\n",
-        "# distance_matrix = squareform(distance_matrix)\n",
+        "from scipy.spatial.distance import pdist\n",
+        "\n",
+        "df_YX = processor.get_num_norm_cols()\n",
+        "distance_matrix = pdist(df_YX, metric='euclidean')\n",
         "\n",
         "# Hierarchical Clustering\n",
         "from scipy.cluster.hierarchy import linkage, dendrogram, fcluster\n",
-        "import matplotlib.pyplot as plt\n",
-        "\n",
-        "# Perform hierarchical clustering\n",
         "linked = linkage(distance_matrix, method='ward')\n",
         "\n",
         "# Plot the dendrogram\n",
@@ -198,6 +173,12 @@
         "# Determine Clusters\n",
         "num_clusters = 2 # Specify the number of clusters\n",
         "clusters = fcluster(linked, num_clusters, criterion='maxclust')\n",
+        "\n",
+        "if len(clusters) != df_YX.shape[0]:\n",
+        "    raise ValueError(\"Mismatch between number of clusters and rows in 'df_YX'.\")\n",
+        "\n",
+        "print(f\"Length of clusters: {len(clusters)}\")\n",
+        "print(f\"Number of rows in df_YX: {df_YX.shape[0]}\")\n",
         "\n",
         "# Add cluster labels to the original DataFrame\n",
         "df_YX['Cluster'] = clusters\n",
@@ -214,7 +195,7 @@
         "cluster_means = df_YX.groupby('Cluster').mean()\n",
         "print(cluster_means)"
       ],
-      "id": "654ebc34",
+      "id": "d75c24a3",
       "execution_count": null,
       "outputs": []
     },
@@ -229,7 +210,7 @@
         "- Compare how different they are\n",
         "  - Visualize data on the first two principal components w.r.t. their attributes\n"
       ],
-      "id": "42471b00"
+      "id": "7b4b93cf"
     },
     {
       "cell_type": "code",
@@ -241,8 +222,9 @@
         "import plotly.express as px\n",
         "\n",
         "# Select and copy relevant columns from the original DataFrame\n",
-        "df_attr = df_YX[['chocolate', 'fruity', 'caramel', 'peanutyalmondy', \n",
-        "                 'nougat', 'crispedricewafer', 'hard', 'bar', 'pluribus']].copy()\n",
+        "df_attr = processor.get_num_norm_columns()\n",
+        "pred_cols = processor.get_predictor_cols()\n",
+        "df_attr = df_attr[pred_cols]\n",
         "\n",
         "# Perform PCA\n",
         "pca = PCA(n_components=2)\n",
@@ -278,7 +260,7 @@
         "                        labels={column: column})\n",
         "    fig_pca.show()"
       ],
-      "id": "96bf33e5",
+      "id": "29c3110c",
       "execution_count": null,
       "outputs": []
     },
@@ -288,14 +270,13 @@
       "source": [
         "#### How many ingredient based attributes do the sweets have? (i.e. we exclude pluribus, bar, and hard)\n"
       ],
-      "id": "94425a34"
+      "id": "40402400"
     },
     {
       "cell_type": "code",
       "metadata": {},
       "source": [
-        "df_attr = df_YX[['chocolate', 'fruity', 'caramel', 'peanutyalmondy', \n",
-        "                 'nougat', 'crispedricewafer']].copy()\n",
+        "df_attr = df_YX\n",
         "sums = df_attr.sum(axis=1)\n",
         "sum_counts = sums.value_counts().sort_index()\n",
         "sum_counts_df = pd.DataFrame({\n",
@@ -309,7 +290,7 @@
         "             color_continuous_scale=px.colors.sequential.Plasma)\n",
         "fig.show()"
       ],
-      "id": "d85a32fc",
+      "id": "4369e6c3",
       "execution_count": null,
       "outputs": []
     },
@@ -317,7 +298,6 @@
       "cell_type": "code",
       "metadata": {},
       "source": [
-        "from statsmodels.miscmodels.ordinal_model import OrderedModel\n",
         "data = pd.DataFrame({\n",
         "    'Number of Attributes': sums,  # Replace `sums` with your independent variable\n",
         "    'Popularity': df['winpercent'] # Replace `y` with your dependent variable (popularity score)\n",
@@ -352,7 +332,7 @@
         "plt.legend()\n",
         "plt.show()"
       ],
-      "id": "8ca8b41e",
+      "id": "e6eee0e7",
       "execution_count": null,
       "outputs": []
     }
