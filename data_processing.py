@@ -1,8 +1,10 @@
 import pandas as pd
+import numpy as np
 from sklearn.preprocessing import StandardScaler
+from typing import Self, Tuple, List
 
 class CandyDataProcessor:
-    def __init__(self, file_path):
+    def __init__(self, file_path:str):
         """
         Initialize the CandyDataProcessor with the dataset.
         
@@ -14,34 +16,36 @@ class CandyDataProcessor:
         self.df = df
         self.original_df = self.df.copy()
 
-    def sort_by_win_percent(self, ascending=False):
+    def sort_by_win_percent(self, ascending=False) -> Self:
         """Sort the DataFrame by 'winpercent' in descending order."""
         self.df = self.df.sort_values(by='winpercent', ascending=ascending)
         return self
 
     @staticmethod
     def get_predictor_cols():
+        """Get a list of the colnames of the characterinstics, i.e. of the features"""
         return ['chocolate','fruity','hard','nougat','crispedricewafer',
                 'peanutyalmondy', 'caramel','bar','pluribus']
 
-    def filter_ingredient_columns(self):
+    def filter_ingredient_columns(self) -> Self:
         """Filter out non-ingredient columns and retain only ingredient-related features."""
         
         self.df = self.df[self.get_predictor_cols()]
         return self
 
-    def get_num_norm_cols(self):
+    def get_num_norm_cols(self) -> np.ndarray:
         """Get normalized numerical columns using StandardScaler."""
         scaler = StandardScaler()
         df = self.df.select_dtypes(include=[float, int])
         YX = scaler.fit_transform(df)
-        return df
+        return YX
 
-    def prepare_features_and_target(self, feature_columns, target_column):
+    def prepare_features_and_target(self, feature_columns: List[str], target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Separate the DataFrame into features (X) and target (y).
         
         Args:
+            feature_columns (array): Array of feature column names.
             target_column (str): Name of the target column.
         
         Returns:
