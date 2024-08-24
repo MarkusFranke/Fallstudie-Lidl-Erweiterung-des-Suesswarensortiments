@@ -4,16 +4,22 @@ from sklearn.preprocessing import StandardScaler
 from typing import Self, Tuple, List
 
 class CandyDataProcessor:
-    def __init__(self, file_path:str):
+    def __init__(self, file_path:str, price_percent_weight:float):
         """
         Initialize the CandyDataProcessor with the dataset.
         
         Args:
             file_path (str): Path to the CSV file containing the candy data.
         """
+        
         df = pd.read_csv(file_path)
-        df['winpercent'] = df['winpercent']/100
-        self.df = df
+        # Scale to 0-1:
+        df['winpercent'] = (df['winpercent'] - min(df['winpercent']))/(max(df['winpercent']) - min(df['winpercent']))
+        df['pricepercent'] = (df['pricepercent'] - min(df['pricepercent']))/(max(df['pricepercent']) - min(df['pricepercent']))
+
+    
+        assert 0 <= price_percent_weight and price_percent_weight <= 1
+        df['desirability'] = df['pricepercent']**price_percent_weight * df['winpercent']**(1 - price_percent_weight)
         self.original_df = self.df.copy()
 
     def sort_by_win_percent(self, ascending=False) -> Self:
