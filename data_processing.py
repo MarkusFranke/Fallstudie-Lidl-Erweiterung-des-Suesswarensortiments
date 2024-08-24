@@ -19,7 +19,7 @@ class CandyDataProcessor:
 
     
         assert 0 <= price_percent_weight and price_percent_weight <= 1
-        df['desirability'] = df['pricepercent']**price_percent_weight * df['winpercent']**(1 - price_percent_weight)
+        df['desirability'] = (1-df['pricepercent'])**price_percent_weight * df['winpercent']**(1 - price_percent_weight)
         self.df = df
         self.original_df = self.df.copy()
 
