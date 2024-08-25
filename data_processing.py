@@ -68,7 +68,7 @@ class CandyDataProcessor:
         self.df = self.original_df.copy()
         return self
 
-    def perform_clustering(self, n_clusters):
+    def perform_clustering(self, n_clusters:int):
         """Perform clustering on the DataFrame and add cluster labels."""
         from scipy.cluster.hierarchy import linkage, fcluster
         from scipy.spatial.distance import pdist
